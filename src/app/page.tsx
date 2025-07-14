@@ -1,103 +1,218 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import { format, parseISO } from "date-fns";
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/dist/style.css";
+
+export default function BookingForm() {
+  const [availableDates, setAvailableDates] = useState<Date[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [timeSlots, setTimeSlots] = useState<string[] | null>(null);
+  const [form, setForm] = useState({ name: "", email: "", time: "" });
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  // Get available dates on load
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/schedule/available-dates`)
+      .then(res => res.json())
+      .then(data => {
+        const dates = data.dates.map((d: string) => parseISO(d));
+        setAvailableDates(dates);
+      });
+  }, []);
+
+  // Fetch times when a date is selected
+  useEffect(() => {
+  if (selectedDate) {
+    setLoadingSlots(true); // Start loading
+    const formatted = format(selectedDate, "yyyy-MM-dd");
+
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/schedule/times?date=${formatted}`)
+      .then(res => res.json())
+      .then(data => {
+        let available = data.times;
+
+        const today = format(new Date(), "yyyy-MM-dd");
+        if (formatted === today) {
+          const now = new Date();
+
+          available = available.filter((timeStr: string) => {
+            const [hour, minute] = timeStr.split(":").map(Number);
+            const slotTime = new Date();
+            slotTime.setHours(hour, minute, 0, 0);
+            return slotTime > now;
+          });
+        }
+
+        setTimeSlots(available);
+        setLoadingSlots(false); // Done loading
+      })
+      .catch(() => {
+        setTimeSlots([]);
+        setLoadingSlots(false); // Even if failed, stop loading
+      });
+  } else {
+    setTimeSlots([]);
+  }
+}, [selectedDate]);
+
+
+
+  // const isAvailable = (date: Date) => {
+  //   return availableDates.some(
+  //     (availableDate) =>
+  //       format(availableDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+  //   );
+  // };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!selectedDate) {
+    alert("Please select a date.");
+    return;
+  }
+
+  if (!form.time) {
+    alert("Please select a time.");
+    return;
+  }
+
+   const selectedDateTime = new Date(`${format(selectedDate!, "yyyy-MM-dd")}T${form.time}`);
+  if (selectedDateTime < new Date()) {
+    alert("Cannot book a time or date that has already passed.");
+    return;
+  }
+
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/book`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...form,
+      date: format(selectedDate, "yyyy-MM-dd"),
+    }),
+  });
+
+  if (res.status === 201 || res.status === 200) {
+    alert("Booking confirmed!");
+    setForm({ name: "", email: "", time: "" });
+    setSelectedDate(undefined);
+  } else if (res.status === 409) {
+    alert("Sorry, that time slot has already been booked. Please choose another.");
+  } else {
+    const data = await res.json();
+    alert(data.message || "Booking failed.");
+  }
+};
+
+
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="max-w-md mx-auto mt-10 p-4">
+      <h1 className="text-2xl font-bold mb-4">Book an Appointment</h1>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+     <DayPicker
+  mode="single"
+  selected={selectedDate}
+  onSelect={(date) => {
+    const formattedNew = date ? format(date, "yyyy-MM-dd") : null;
+    const formattedPrev = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null;
+
+    if (formattedNew === formattedPrev) {
+      setSelectedDate(undefined);     // Deselect same date
+      setTimeSlots([]);               // Clear time slots
+      setForm((prev) => ({ ...prev, time: "" }));
+    } else {
+      setSelectedDate(date!);         // Select new date
+      setTimeSlots(null);             // Clear old time slots
+      setForm((prev) => ({ ...prev, time: "" }));
+    }
+  }}
+ 
+  required={false} // <-- enables toggling/deselecting
+  fromDate={new Date()}
+  modifiers={{ available: availableDates }}
+  modifiersStyles={{
+    available: { backgroundColor: "#4ade80", color: "white" },
+    selected: { backgroundColor: "#2563eb", color: "white" },
+  }}
+  disabled={(date) =>
+    !availableDates.some(
+      (d) => format(d, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+    )
+  }
+/>
+
+
+      {selectedDate && (
+        <>
+          <label className="block mt-4 font-medium mb-2">Select Time Slot</label>
+
+       {loadingSlots ? (
+  <p className="text-sm text-gray-500 mt-2">Loading time slots...</p>
+) : Array.isArray(timeSlots) && timeSlots.length > 0 ? (
+  <div className="grid grid-cols-3 gap-2">
+    {timeSlots.map((t) => (
+      <button
+        key={t}
+        type="button"
+       onClick={() =>
+  setForm((prev) => ({
+    ...prev,
+    time: prev.time === t ? "" : t,
+  }))
+}
+        className={`p-2 rounded border text-sm ${
+          form.time === t
+            ? "bg-blue-600 text-white"
+            : "bg-gray-100 hover:bg-blue-100"
+        }`}
+      >
+        {t}
+      </button>
+    ))}
+  </div>
+) : (
+  <p className="text-sm text-red-500 mt-2">No available time slots for this date.</p>
+)}
+
+        </>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4 mt-6">
+        <input
+          className="w-full border p-2 rounded"
+          type="text"
+          name="name"
+          placeholder="Your name"
+          value={form.name}
+          onChange={handleChange}
+          required
+        />
+
+        <input
+          className="w-full border p-2 rounded"
+          type="email"
+          name="email"
+          placeholder="Your email"
+          value={form.email}
+          onChange={handleChange}
+          required
+        />
+
+        <button
+          type="submit"
+          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+          disabled={!selectedDate || !form.time}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+          Book Now
+        </button>
+      </form>
+    </main>
   );
 }
